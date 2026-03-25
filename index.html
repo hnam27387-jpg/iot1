@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP32 HiveMQ Dashboard</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; display: flex; justify-content: center; padding: 20px; }
+        .card { background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 100%; max-width: 400px; padding: 25px; }
+        h2 { color: #1a73e8; text-align: center; margin-bottom: 20px; border-bottom: 2px solid #e8f0fe; padding-bottom: 10px; }
+        .input-group { margin-bottom: 15px; }
+        label { display: block; font-size: 13px; color: #666; margin-bottom: 5px; }
+        input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
+        .btn-main { width: 100%; padding: 12px; background: #1a73e8; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 20px; }
+        .btn-main:hover { background: #1557b0; }
+        .ctrl-btns { display: flex; gap: 10px; margin-bottom: 20px; }
+        .btn-led { flex: 1; padding: 15px; border: none; border-radius: 10px; color: white; cursor: pointer; font-weight: bold; font-size: 16px; transition: 0.3s; }
+        .on { background: #34a853; box-shadow: 0 4px 10px rgba(52, 168, 83, 0.3); }
+        .off { background: #ea4335; box-shadow: 0 4px 10px rgba(234, 67, 53, 0.3); }
+        .monitor { background: #f8f9fa; border-radius: 10px; padding: 15px; }
+        .stat { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
+        .val { font-weight: bold; color: #1a73e8; }
+        #log { font-size: 11px; color: #888; text-align: center; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>ESP32 Control</h2>
+    
+    <div class="input-group">
+        <label>Cluster URL (WSS)</label>
+        <input type="text" id="host" placeholder="f64...hivemq.cloud">
+    </div>
+    <div class="input-group" style="display: flex; gap: 10px;">
+        <div style="flex:1"><label>User</label><input type="text" id="user"></div>
+        <div style="flex:1"><label>Pass</label><input type="password" id="pass"></div>
+    </div>
+    <button class="btn-main" onclick="startConnect()">KẾT NỐI VÀ LƯU</button>
+
+    <div class="ctrl-btns">
+        <button class="btn-led on" onclick="send('1')">ON (GPIO12)</button>
+        <button class="btn-led off" onclick="send('0')">OFF (GPIO12)</button>
+    </div>
+
+    <div class="monitor">
+        <div class="stat"><span>Trạng thái LED:</span> <span class="val" id="st-led">---</span></div>
+        <div class="stat"><span>Biến đếm (Count):</span> <span class="val" id="st-count">0</span></div>
+        <div class="stat"><span>Sóng WiFi:</span> <span class="val" id="st-rssi">---</span> dBm</div>
+    </div>
+    <div id="log">Chưa kết nối</div>
+</div>
+
+<script>
+    let mqttClient = null;
+
+    // Tự động load lại thông số cũ khi mở Web
+    window.onload = () => {
+        const saved = JSON.parse(localStorage.getItem('esp32_cfg') || '{}');
+        document.getElementById('host').value = saved.host || "f64c7d9928c248a285629526bb1e4679.s1.eu.hivemq.cloud";
+        document.getElementById('user').value = saved.user || "hivemq.webclient.1774421590724";
+        document.getElementById('pass').value = saved.pass || "6,4opWy1ODjU.0P*A&uh";
+    };
+
+    function startConnect() {
+        const host = document.getElementById('host').value;
+        const user = document.getElementById('user').value;
+        const pass = document.getElementById('pass').value;
+
+        // Lưu cấu hình vào trình duyệt
+        localStorage.setItem('esp32_cfg', JSON.stringify({host, user, pass}));
+
+        if(mqttClient) mqttClient.end();
+        document.getElementById('log').innerText = "Đang kết nối...";
+
+        // THÀNH PHẦN 2: Cấu hình chuẩn cho HiveMQ Cloud (Port 8884)
+        mqttClient = mqtt.connect(`wss://${host}:8884/mqtt`, {
+            username: user,
+            password: pass,
+            clientId: 'web_' + Math.random().toString(16).substr(2, 4)
+        });
+
+        mqttClient.on('connect', () => {
+            document.getElementById('log').innerHTML = "<b style='color:green'>Đã trực tuyến!</b>";
+            mqttClient.subscribe('esp32/monitor');
+        });
+
+        mqttClient.on('message', (topic, message) => {
+            if(topic === 'esp32/monitor') {
+                const data = JSON.parse(message.toString());
+                document.getElementById('st-led').innerText = data.led_status;
+                document.getElementById('st-count').innerText = data.count;
+                document.getElementById('st-rssi').innerText = data.wifi_rssi;
+            }
+        });
+    }
+
+    function send(cmd) {
+        if(mqttClient && mqttClient.connected) {
+            mqttClient.publish('esp32/commands', cmd);
+        } else { alert("Chưa kết nối Server!"); }
+    }
+</script>
+</body>
+</html>

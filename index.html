@@ -3,104 +3,104 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32 HiveMQ Dashboard</title>
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <title>Hệ thống Giám sát Realtime</title>
+    
+    <!-- CSS: Định dạng giao diện ngay tại đây -->
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #f0f2f5; display: flex; justify-content: center; padding: 20px; }
-        .card { background: white; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); width: 100%; max-width: 400px; padding: 25px; }
-        h2 { color: #1a73e8; text-align: center; margin-bottom: 20px; border-bottom: 2px solid #e8f0fe; padding-bottom: 10px; }
-        .input-group { margin-bottom: 15px; }
-        label { display: block; font-size: 13px; color: #666; margin-bottom: 5px; }
-        input { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; }
-        .btn-main { width: 100%; padding: 12px; background: #1a73e8; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 20px; }
-        .btn-main:hover { background: #1557b0; }
-        .ctrl-btns { display: flex; gap: 10px; margin-bottom: 20px; }
-        .btn-led { flex: 1; padding: 15px; border: none; border-radius: 10px; color: white; cursor: pointer; font-weight: bold; font-size: 16px; transition: 0.3s; }
-        .on { background: #34a853; box-shadow: 0 4px 10px rgba(52, 168, 83, 0.3); }
-        .off { background: #ea4335; box-shadow: 0 4px 10px rgba(234, 67, 53, 0.3); }
-        .monitor { background: #f8f9fa; border-radius: 10px; padding: 15px; }
-        .stat { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
-        .val { font-weight: bold; color: #1a73e8; }
-        #log { font-size: 11px; color: #888; text-align: center; margin-top: 10px; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #eef2f7;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+        .monitor-card {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            text-align: center;
+            width: 350px;
+        }
+        h1 { color: #1a73e8; font-size: 1.5rem; margin-bottom: 25px; }
+        #message-box {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: #333;
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        #timestamp { color: #666; font-size: 0.9rem; }
+        .status-indicator {
+            margin-top: 20px;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+        .dot { height: 10px; width: 10px; background-color: #4caf50; border-radius: 50%; display: inline-block; }
     </style>
 </head>
 <body>
 
-<div class="card">
-    <h2>ESP32 Control</h2>
-    
-    <div class="input-group">
-        <label>Cluster URL (WSS)</label>
-        <input type="text" id="host" placeholder="f64...hivemq.cloud">
-    </div>
-    <div class="input-group" style="display: flex; gap: 10px;">
-        <div style="flex:1"><label>User</label><input type="text" id="user"></div>
-        <div style="flex:1"><label>Pass</label><input type="password" id="pass"></div>
-    </div>
-    <button class="btn-main" onclick="startConnect()">KẾT NỐI VÀ LƯU</button>
-
-    <div class="ctrl-btns">
-        <button class="btn-led on" onclick="send('1')">ON (GPIO12)</button>
-        <button class="btn-led off" onclick="send('0')">OFF (GPIO12)</button>
+    <div class="monitor-card">
+        <h1>Bảng Điều Khiển</h1>
+        <div id="message-box">Đang kết nối...</div>
+        <div id="timestamp">Đang chờ dữ liệu từ máy tính...</div>
+        
+        <div class="status-indicator">
+            <span class="dot"></span>
+            <span id="auth-text">Đang xác thực bảo mật...</span>
+        </div>
     </div>
 
-    <div class="monitor">
-        <div class="stat"><span>Trạng thái LED:</span> <span class="val" id="st-led">---</span></div>
-        <div class="stat"><span>Biến đếm (Count):</span> <span class="val" id="st-count">0</span></div>
-        <div class="stat"><span>Sóng WiFi:</span> <span class="val" id="st-rssi">---</span> dBm</div>
-    </div>
-    <div id="log">Chưa kết nối</div>
-</div>
+    <!-- Tích hợp các thư viện Firebase SDK v8 -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
 
-<script>
-    let mqttClient = null;
+    <script>
+        // Cấu hình Firebase với API Key bạn cung cấp
+        const firebaseConfig = {
+            apiKey: "lCCKFjYy7sxgzizmsHYqZRuPeC2eoIqHCPTTu9C8", // Mã Auth của bạn
+            authDomain: "camera-detect-b0be0.firebaseapp.com",
+            databaseURL: "https://camera-detect-b0be0-default-rtdb.firebaseio.com",
+            projectId: "camera-detect-b0be0",
+            storageBucket: "camera-detect-b0be0.appspot.com",
+        };
 
-    // Tự động load lại thông số cũ khi mở Web
-    window.onload = () => {
-        const saved = JSON.parse(localStorage.getItem('esp32_cfg') || '{}');
-        document.getElementById('host').value = saved.host || "f64c7d9928c248a285629526bb1e4679.s1.eu.hivemq.cloud";
-        document.getElementById('user').value = saved.user || "hivemq.webclient.1774421590724";
-        document.getElementById('pass').value = saved.pass || "6,4opWy1ODjU.0P*A&uh";
-    };
+        // Khởi tạo Firebase
+        firebase.initializeApp(firebaseConfig);
 
-    function startConnect() {
-        const host = document.getElementById('host').value;
-        const user = document.getElementById('user').value;
-        const pass = document.getElementById('pass').value;
+        // Lệnh quan trọng: Đăng nhập ẩn danh để có UID vượt qua Rules auth != null[cite: 3]
+        firebase.auth().signInAnonymously()
+            .then(() => {
+                document.getElementById('auth-text').innerText = "Đã xác thực thành công";
+                console.log("Xác thực ẩn danh thành công!");
 
-        // Lưu cấu hình vào trình duyệt
-        localStorage.setItem('esp32_cfg', JSON.stringify({host, user, pass}));
+                // Sau khi login xong mới bắt đầu lắng nghe Database
+                const db = firebase.database();
+                const msgRef = db.ref('message');
 
-        if(mqttClient) mqttClient.end();
-        document.getElementById('log').innerText = "Đang kết nối...";
-
-        // THÀNH PHẦN 2: Cấu hình chuẩn cho HiveMQ Cloud (Port 8884)
-        mqttClient = mqtt.connect(`wss://${host}:8884/mqtt`, {
-            username: user,
-            password: pass,
-            clientId: 'web_' + Math.random().toString(16).substr(2, 4)
-        });
-
-        mqttClient.on('connect', () => {
-            document.getElementById('log').innerHTML = "<b style='color:green'>Đã trực tuyến!</b>";
-            mqttClient.subscribe('esp32/monitor');
-        });
-
-        mqttClient.on('message', (topic, message) => {
-            if(topic === 'esp32/monitor') {
-                const data = JSON.parse(message.toString());
-                document.getElementById('st-led').innerText = data.led_status;
-                document.getElementById('st-count').innerText = data.count;
-                document.getElementById('st-rssi').innerText = data.wifi_rssi;
-            }
-        });
-    }
-
-    function send(cmd) {
-        if(mqttClient && mqttClient.connected) {
-            mqttClient.publish('esp32/commands', cmd);
-        } else { alert("Chưa kết nối Server!"); }
-    }
-</script>
+                msgRef.on('value', (snapshot) => {
+                    const data = snapshot.val();
+                    if (data) {
+                        document.getElementById('message-box').innerText = data.text;
+                        document.getElementById('timestamp').innerText = "Cập nhật lúc: " + data.timestamp;
+                    }
+                });
+            })
+            .catch((error) => {
+                console.error("Lỗi bảo mật:", error.message);
+                document.getElementById('message-box').innerText = "Truy cập bị chặn!";
+                document.getElementById('auth-text').innerText = "Lỗi: Kiểm tra lại Firebase Auth";
+                document.getElementById('auth-text').style.color = "red";
+            });
+    </script>
 </body>
 </html>
